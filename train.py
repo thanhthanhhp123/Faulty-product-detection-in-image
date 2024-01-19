@@ -19,11 +19,11 @@ from unet import UNet
 from utils.data_loading import BDataset
 from utils.dice_score import dice_loss
 
-train_img = Path('./data/imgs/')
-train_mask = Path('./data/masks/')
+train_img = Path('/content/Faulty-product-detection-in-image/bottle/train/images')
+train_mask = Path('/content/Faulty-product-detection-in-image/bottle/train/masks')
 
-val_img = Path('./data/imgs/')
-val_mask = Path('./data/masks/')
+val_img = Path('/content/Faulty-product-detection-in-image/bottle/val/images')
+val_mask = Path('/content/Faulty-product-detection-in-image/bottle/val/masks')
 dir_checkpoint = Path('./checkpoints/')
 
 
@@ -42,10 +42,10 @@ def train_model(
         gradient_clipping: float = 1.0,
 ):
     # 1. Create dataset
-    train_set = BDataset(dir_img, dir_mask, img_scale)
-    val_set = BDataset(dir_img, dir_mask, img_scale)
+    train_set = BDataset(train_img, train_mask, img_scale)
+    val_set = BDataset(val_img, val_mask, img_scale)
 
-    # 2. Split into train / validation partitions
+    n_train = len(train_set)
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
