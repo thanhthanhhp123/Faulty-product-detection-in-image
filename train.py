@@ -42,8 +42,8 @@ def train_model(
         gradient_clipping: float = 1.0,
 ):
     # 1. Create dataset
-    train_set = BDataset(train_img, train_mask, img_scale)
-    val_set = BDataset(val_img, val_mask, img_scale)
+    train_set = BDataset(train_img, train_mask)
+    val_set = BDataset(val_img, val_mask)
 
     n_train = len(train_set)
 
