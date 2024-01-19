@@ -45,7 +45,7 @@ class BDataset(Dataset):
                 tqdm(
                     p.imap(
                         partial(unique_mask_values, mask_dir=self.mask_dir, mask_suffix=self.mask_suffix),
-                        total=len(self.ids),
+                        self.ids
                     ),
                 )
             )
