@@ -37,13 +37,10 @@ class BottleDataset(Dataset):
         return image, mask
     
 if __name__ == '__main__':
-    bottle = BottleDataset(
-        image_dir="bottle/images",
-        mask_dir="bottle/masks",
-    )
-
-    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(8, 4))
-    image, mask = bottle[0]
-    ax[0].imshow(image)
-    ax[1].imshow(mask)
-    plt.show()
+    image_dir = "bottle/train/images/"
+    mask_dir = "bottle/train/masks/"
+    images = sorted(os.listdir(image_dir))
+    masks = sorted(os.listdir(mask_dir))
+    for i, j in zip(images, masks):
+        if i != j:
+            print(i, j)

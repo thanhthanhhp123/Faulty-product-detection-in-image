@@ -12,14 +12,14 @@ warnings.filterwarnings("ignore")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-train_images = "bottle/train/images"
-train_masks = "bottle/train/masks"
+train_images = "/content/Faulty-product-detection-in-image/bottle/train/images/"
+train_masks = "/content/Faulty-product-detection-in-image/bottle/train/masks/"
 
-val_images = "bottle/val/images"
-val_masks = "bottle/val/masks"
+val_images = "/content/Faulty-product-detection-in-image/bottle/val/images/"
+val_masks = "/content/Faulty-product-detection-in-image/bottle/val/masks/"
 num_epochs = 20
 learning_rate = 1e-4
-batch_size = 16
+batch_size = 4
 pin_memory = True
 num_workers = 2
 load_model = False
@@ -81,7 +81,6 @@ def main():
         batch_size,
         train_transform,
         val_transforms,
-        num_workers,
         pin_memory,
     )
     if load_model:

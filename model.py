@@ -70,7 +70,7 @@ class UNet(nn.Module):
 
         return self.final_conv(x)
 
-if __name__ == "__main__":
-    x = torch.randn((3, 1, 161, 161))
-    model = UNet(in_channels=1, out_channels=1)
-    print(model)
+# if __name__ == "__main__":
+#     x = torch.randn((3, 1, 161, 161))
+#     model = UNet(in_channels=1, out_channels=1)
+#     print(model)
