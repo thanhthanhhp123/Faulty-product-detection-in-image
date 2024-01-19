@@ -23,30 +23,85 @@ def unique_mask_values(idx, mask_dir, mask_suffix):
     else:
         raise ValueError(f'Loaded masks should have 2 or 3 dimensions, found {mask.ndim}')
     
-class BottleDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, transforms = None):
-        self.image_dir = image_dir
-        self.mask_dir = mask_dir
-        self.transforms = transforms
-        self.images = os.listdir(image_dir)
-        self.masks = os.listdir(mask_dir)
+class BDataset(Dataset):
+    def __init__(self, 
+                 image_dir: str,
+                 mask_dir: str,
+                 scale: float = 1.0,
+                 mask_suffix: str = '_mask',):
+        self.image_dir = Path(image_dir)
+        self.mask_dir = Path(mask_dir)
+        self.scale = scale
+        self.mask_suffix = mask_suffix
+
+        self.ids = [
+            splitext(file)[0] for file in listdir(image_dir) if not file.startswith('.')
+        ]
+
+        logging.info(f'Creating dataset with {len(self.ids)} examples')
+        logging.info('Scanning images and masks folders...')
+        with Pool() as p:
+            unique = list(
+                    p.imap(
+                        partial(unique_mask_values, mask_dir=self.mask_dir, mask_suffix=self.mask_suffix),
+                        self.ids
+                    ),
+                )
+            self.mask_values =list(sorted(
+                np.unique(
+                    np.concatenate(
+                        unique, axis=0
+                    ).tolist()
+                )
+            ))
+        logging.info(f'Found {len(self.mask_values)} unique classes')
     
     def __len__(self):
-        return len(self.images)
+        return len(self.ids)
     
-    def __getitem__(self, index):
-        images = sorted(os.listdir(self.image_dir))
-        masks = sorted(os.listdir(self.mask_dir))
-        img_path = os.path.join(self.image_dir, images[index])
-        mask_path = os.path.join(self.mask_dir, masks[index])
-        image = np.array(Image.open(img_path).convert("RGB"))
-        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-        mask[mask == 255.0] = 1.0
+    @staticmethod
+    def preprocess(mask_values, pil_img, scale, is_mask):
+        w, h = pil_img.size
+        newW, newH = int(scale * w), int(scale * h)
+        pil_img = pil_img.resize((newW, newH), resample = Image.NEAREST if is_mask else Image.BICUBIC)
         
-        if self.transforms is not None:
-            augmentations = self.transforms(image=image, mask=mask)
-            image = augmentations["image"]
-            mask = augmentations["mask"]
-        
-        return image, mask
+        if is_mask:
+            mask = np.zeros((newH, newW), dtype=np.int64)
+            for i, v in enumerate(mask_values):
+                if img.ndim == 2:
+                    mask[img == v] = i
+                else:
+                    mask[(img == v).all(-1)] = i
+
+            return mask
+
+        else:
+            if img.ndim == 2:
+                img = img[np.newaxis, ...]
+            else:
+                img = img.transpose((2, 0, 1))
+
+            if (img > 1).any():
+                img = img / 255.0
+
+            return img
+
+    def __getitem__(self, idx):
+        name = self.ids[idx]
+        mask_file = list(self.mask_dir.glob(name + self.mask_suffix + '.*'))
+        img_file = list(self.images_dir.glob(name + '.*'))
+
+        img = Image.open(img_file[0])
+        mask = Image.open(mask_file[0])
+
+        assert img.size == mask.size, \
+            f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
+
+        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
+        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
+
+        return {
+            'image': torch.as_tensor(img.copy()).float().contiguous(),
+            'mask': torch.as_tensor(mask.copy()).long().contiguous()
+        }
 
