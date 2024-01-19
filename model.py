@@ -2,75 +2,54 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 
-class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(num_features=out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(num_features=out_channels),
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        return self.conv(x)
     
 
+def unet_block(in_channels, out_channels):
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, 3, 1, 1),
+        nn.ReLU(),
+        nn.Conv2d(out_channels, out_channels, 3, 1, 1),
+        nn.ReLU()
+    )
+
 class UNet(nn.Module):
-    def __init__(
-            self, in_channels=3, out_channels=1, features=[64, 128, 256, 512],
-    ):
+    def __init__(self, n_classes):
         super().__init__()
-        self.ups = nn.ModuleList()
-        self.downs = nn.ModuleList()
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        # Down part of UNet
-        for feature in features:
-            self.downs.append(DoubleConv(in_channels, feature))
-            in_channels = feature
-
-        # Up part of UNet
-        for feature in reversed(features):
-            self.ups.append(
-                nn.ConvTranspose2d(
-                    in_channels=feature*2,
-                    out_channels=feature,
-                    kernel_size=2,
-                    stride=2
-                )
-            )
-            self.ups.append(DoubleConv(feature*2, feature))
-
-        self.bottleneck = DoubleConv(features[-1], features[-1]*2)
-        self.final_conv = nn.Conv2d(in_channels=features[0], out_channels=out_channels, kernel_size=1)
-        
+        self.n_classes = n_classes
+        self.downsample = nn.MaxPool2d(2)
+        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
+        self.block_down1 = unet_block(3, 64)
+        self.block_down2 = unet_block(64, 128)
+        self.block_down3 = unet_block(128, 256)
+        self.block_down4 = unet_block(256, 512)
+        self.block_neck = unet_block(512, 1024)
+        self.block_up1 = unet_block(1024+512, 512)
+        self.block_up2 = unet_block(256+512, 256)
+        self.block_up3 = unet_block(128+256, 128)
+        self.block_up4 = unet_block(128+64, 64)
+        self.conv_cls = nn.Conv2d(64, self.n_classes, 1) # -> (B, n_class, H, W)
+    
     def forward(self, x):
-        skip_connections = []
+        # (B, C, H, W)
+        x1 = self.block_down1(x)
+        x = self.downsample(x1)
+        x2 = self.block_down2(x)
+        x = self.downsample(x2)
+        x3 = self.block_down3(x)
+        x = self.downsample(x3)
+        x4 = self.block_down4(x)
+        x = self.downsample(x4)
 
-        for down in self.downs:
-            x = down(x)
-            skip_connections.append(x)
-            x = self.pool(x)
-        
-        x = self.bottleneck(x)
-        skip_connections = skip_connections[::-1]
+        x = self.block_neck(x)
 
-        for idx in range(0, len(self.ups), 2):
-            x = self.ups[idx](x)
-            skip_connection = skip_connections[idx//2]
+        x = torch.cat([x4, self.upsample(x)], dim=1)
+        x = self.block_up1(x)
+        x = torch.cat([x3, self.upsample(x)], dim=1)
+        x = self.block_up2(x)
+        x = torch.cat([x2, self.upsample(x)], dim=1)
+        x = self.block_up3(x)
+        x = torch.cat([x1, self.upsample(x)], dim=1)
+        x = self.block_up4(x)
 
-            if x.shape != skip_connection.shape:
-                x = TF.resize(x, size=skip_connection.shape[2:])
-            
-            concat_skip = torch.cat((skip_connection, x), dim=1)
-            x = self.ups[idx+1](concat_skip)
-
-        return self.final_conv(x)
-
-# if __name__ == "__main__":
-#     x = torch.randn((3, 1, 161, 161))
-#     model = UNet(in_channels=1, out_channels=1)
-#     print(model)
+        x = self.conv_cls(x)
+        return x

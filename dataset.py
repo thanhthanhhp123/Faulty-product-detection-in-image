@@ -27,7 +27,7 @@ class BottleDataset(Dataset):
         mask_path = os.path.join(self.mask_dir, masks[index])
         image = np.array(Image.open(img_path).convert("RGB"))
         mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-        # mask[mask == 255.0] = 1.0
+        mask[mask == 255.0] = 1.0
         
         if self.transforms is not None:
             augmentations = self.transforms(image=image, mask=mask)
@@ -37,8 +37,12 @@ class BottleDataset(Dataset):
         return image, mask
     
 if __name__ == '__main__':
-    image_dir = "bottle/train/images/"
-    mask_dir = "bottle/train/masks/"
-    images = sorted(os.listdir(image_dir))
-    masks = sorted(os.listdir(mask_dir))
-    print(images)
+    data = BottleDataset(
+        image_dir="bottle/train/images/",
+        mask_dir="bottle/train/masks/",
+    )
+    img, mask = data[0]
+    fig, ax = plt.subplots(1,2, figsize=(10,10))
+    ax[0].imshow(img)
+    ax[1].imshow(mask, cmap="gray")
+    plt.show()

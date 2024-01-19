@@ -3,88 +3,36 @@ import torchvision
 from dataset import BottleDataset
 from torch.utils.data import DataLoader
 
-def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
-    print("=> Saving checkpoint")
-    torch.save(state, filename)
+class UnNormalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+        
+    def __call__(self, tensor):
+        for t, m, s in zip(tensor, self.mean, self.std):
+            t.mul_(s).add_(m)
+            # The normalize code -> t.sub_(m).div_(s)
+        return tensor
+    
 
-def load_checkpoint(checkpoint, model):
-    print("=> Loading checkpoint")
-    model.load_state_dict(checkpoint["state_dict"])
+class AverageMeter(object):
+    def __init__(self):
+        self.reset()
 
-def get_loaders(
-    train_dir,
-    train_maskdir,
-    val_dir,
-    val_maskdir,
-    batch_size,
-    train_transform,
-    val_transform,
-    pin_memory=True,
-):
-    train_ds = BottleDataset(
-        image_dir=train_dir,
-        mask_dir=train_maskdir,
-        transforms=train_transform,
-    )
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
 
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        pin_memory=pin_memory,
-        shuffle=True,
-    )
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
 
-    val_ds = BottleDataset(
-        image_dir=val_dir,
-        mask_dir=val_maskdir,
-        transforms=val_transform,
-    )
-
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=batch_size,
-        pin_memory=pin_memory,
-        shuffle=False,
-    )
-
-    return train_loader, val_loader
-
-def check_accuracy(loader, model, device="cuda"):
-    num_correct = 0
-    num_pixels = 0
-    dice_score = 0
-    model.eval()
-
-    with torch.no_grad():
-        for x, y in loader:
-            x = x.to(device)
-            y = y.to(device).unsqueeze(1)
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
-            num_correct += (preds == y).sum()
-            num_pixels += torch.numel(preds)
-            dice_score += (2 * (preds * y).sum()) / (
-                (preds + y).sum() + 1e-8
-            )
-
-    print(
-        f"Got {num_correct}/{num_pixels} with acc {num_correct/num_pixels*100:.2f}"
-    )
-    print(f"Dice score: {dice_score/len(loader)}")
-    model.train()
-
-def save_predictions_as_imgs(
-    loader, model, folder="saved_images/", device="cuda"
-):
-    model.eval()
-    for idx, (x, y) in enumerate(loader):
-        x = x.to(device=device)
-        with torch.no_grad():
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
-        torchvision.utils.save_image(
-            preds, f"{folder}/pred_{idx}.png"
-        )
-        torchvision.utils.save_image(y.unsqueeze(1), f"{folder}{idx}.png")
-
-    model.train()
+def accuracy_function(preds, targets):
+    preds_flat = preds.flatten()
+    targets_flat = targets.flatten()
+    acc = torch.sum(preds_flat == targets_flat)
+    return acc/targets_flat.shape[0]

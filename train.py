@@ -1,109 +1,119 @@
-import torch
-import albumentations as A
-from tqdm import tqdm
-from model import UNet
-import torch.nn as nn
-from dataset import *
-from albumentations.pytorch import ToTensorV2
-import torch.optim as optim
 from utils import *
-import warnings
-warnings.filterwarnings("ignore")
+from dataset import BottleDataset
+from model import UNet
+
+from torch.utils.data import DataLoader
+import torchmetrics
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+from tqdm import tqdm
+from glob import glob
+import os
+import torch
+import torch.nn as nn
+
+train_size = 224
+
+train_transforms = A.Compose(
+    [
+        A.Resize(width=train_size, height=train_size),
+        A.HorizontalFlip(),
+        A.RandomBrightnessContrast(),
+        A.Blur(),
+        A.Sharpen(),
+        A.RGBShift(),
+        A.Cutout(num_holes=5, max_h_size=25, max_w_size=25, fill_value=0),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0),
+        ToTensorV2(),
+    ]
+)
+
+val_transforms = A.Compose(
+    [
+        A.Resize(width=train_size, height=train_size),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0),
+        ToTensorV2(),
+    ]
+)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-train_images = "/content/Faulty-product-detection-in-image/bottle/train/images/"
-train_masks = "/content/Faulty-product-detection-in-image/bottle/train/masks/"
+batch_size = 8
+n_workers = os.cpu_count()
+print(f"Using {n_workers} workers")
 
-val_images = "/content/Faulty-product-detection-in-image/bottle/val/images/"
-val_masks = "/content/Faulty-product-detection-in-image/bottle/val/masks/"
-num_epochs = 20
-learning_rate = 1e-4
-batch_size = 4
-pin_memory = True
-num_workers = 2
-load_model = False
+train_loader = DataLoader(
+    BottleDataset(
+        image_dir="bottle/train/images/",
+        mask_dir="bottle/train/masks/",
+        transforms=train_transforms,
+    ),
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=n_workers,
+)
 
-def train_fn(loader, model, optimizer, loss_fn, scaler):
-    loop = tqdm(loader)
-    
-    for batch_idx, (data, targets) in enumerate(loop):
-        data = data.to(device)
-        targets = targets.float().unsqueeze(1).to(device)
-        
-        # forward
-        with torch.cuda.amp.autocast():
-            predictions = model(data)
-            loss = loss_fn(predictions, targets)
-        
-        # backward
+val_loader = DataLoader(
+    BottleDataset(
+        image_dir="bottle/val/images/",
+        mask_dir="bottle/val/masks/",
+        transforms=val_transforms,
+    ),
+    batch_size=batch_size,
+    shuffle=False,
+    num_workers=n_workers,
+)
+
+model = UNet(1).to(device)
+
+criterion = nn.CrossEntropyLoss()
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+n_eps = 30
+
+dice_fn = torchmetrics.Dice(eps=1e-7, average="macro").to(device)
+
+iou_fn = torchmetrics.IoU(eps=1e-7, average="macro").to(device)
+
+acc_meter = AverageMeter()
+train_loss_meter = AverageMeter()
+val_loss_meter = AverageMeter()
+dice_meter = AverageMeter()
+iou_meter = AverageMeter()
+
+for epoch in range(1, 1+n_eps):
+    acc_meter.reset()
+    train_loss_meter.reset()
+    val_loss_meter.reset()
+    iou_meter.reset()
+    dice_meter.reset()
+    model.train()
+
+    for batch_id, (x, y,) in enumerate(
+        tqdm(train_loader, desc=f"Training epoch {epoch}", total=len(train_loader))
+    ):
         optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        
-        # update tqdm loop
-        loop.set_postfix(loss=loss.item())
+        n = x.shape[0]
+        x = x.to(device).float()
+        y = y.to(device).long()
+        y_pred = model(x)
+        loss = criterion(y_pred, y)
+        loss.backward()
+        optimizer.step()
 
-def main():
-    train_transform = A.Compose(
-        [
-            A.Rotate(limit=35, p=1.0),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.1),
-            A.Normalize(
-                mean=[0.0, 0.0, 0.0],
-                std=[1.0, 1.0, 1.0],
-                max_pixel_value=255.0,
-            ),
-            ToTensorV2(),
-        ]
+        with torch.no_grad():
+            y_pred_mask = y_pred.argmax(dim=1).squeeze()
+            dice_score = dice_fn(y_pred_mask, y.long())
+            iou_score = iou_fn(y_pred_mask, y.long())
+            acc = accuracy_function(y_pred_mask, y.long())
+
+        train_loss_meter.update(loss.item(), n)
+        dice_meter.update(dice_score.item(), n)
+        acc_meter.update(acc.item(), n)
+        iou_meter.update(iou_score.item(), n)
+    print(
+        f"Training epoch {epoch}: train_loss: {train_loss_meter.avg:.4f}, acc: {acc_meter.avg:.4f}, dice: {dice_meter.avg:.4f}, iou: {iou_meter.avg:.4f}"
     )
+    if epoch % 5 == 0:
+        torch.save(model.state_dict(), f"bottle_model_epoch_{epoch}.pth")
     
-    val_transforms = A.Compose(
-        [A.Normalize(
-            mean=[0.0, 0.0, 0.0],
-            std=[1.0, 1.0, 1.0],
-            max_pixel_value=255.0,
-        ),
-        ToTensorV2(),
-        ]
-    )
-    model = UNet(in_channels=3, out_channels=1).to(device)
-    loss_fn = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-    train_loader, val_loader = get_loaders(
-        train_images,
-        train_masks,
-        val_images,
-        val_masks,
-        batch_size,
-        train_transform,
-        val_transforms,
-        pin_memory,
-    )
-    if load_model:
-        load_checkpoint(torch.load("my_checkpoint.pth.tar"), model)
-    scaler = torch.cuda.amp.GradScaler()
-
-    for epoch in range(num_epochs):
-        print(f"---------Epoch {epoch+1}/{num_epochs}-------")
-        train_fn(train_loader, model, optimizer, loss_fn, scaler)
-
-        # save model
-        checkpoint = {
-            "state_dict": model.state_dict(),
-            "optimizer":optimizer.state_dict(),
-        }
-        save_checkpoint(checkpoint, filename=f"Epoch_{epoch}_checkpoint.pth.tar")
-
-        # check accuracy
-        check_accuracy(val_loader, model, device=device)
-
-        save_predictions_as_imgs(
-            val_loader, model, folder="saved_images/", device=device
-        )
-
-if __name__ == "__main__":
-    main()
