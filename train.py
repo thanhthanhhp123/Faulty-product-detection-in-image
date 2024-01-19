@@ -88,6 +88,7 @@ def main():
     scaler = torch.cuda.amp.GradScaler()
 
     for epoch in range(num_epochs):
+        print(f"---------Epoch {epoch+1}/{num_epochs}-------")
         train_fn(train_loader, model, optimizer, loss_fn, scaler)
 
         # save model
@@ -95,7 +96,7 @@ def main():
             "state_dict": model.state_dict(),
             "optimizer":optimizer.state_dict(),
         }
-        save_checkpoint(checkpoint)
+        save_checkpoint(checkpoint, filename=f"Epoch_{epoch}_checkpoint.pth.tar")
 
         # check accuracy
         check_accuracy(val_loader, model, device=device)

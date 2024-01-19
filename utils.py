@@ -74,7 +74,7 @@ def check_accuracy(loader, model, device="cuda"):
     model.train()
 
 def save_predictions_as_imgs(
-    loader, model, folder="saved_images", device="cuda"
+    loader, model, folder="saved_images/", device="cuda"
 ):
     model.eval()
     for idx, (x, y) in enumerate(loader):

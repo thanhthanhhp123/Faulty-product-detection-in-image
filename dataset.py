@@ -41,6 +41,4 @@ if __name__ == '__main__':
     mask_dir = "bottle/train/masks/"
     images = sorted(os.listdir(image_dir))
     masks = sorted(os.listdir(mask_dir))
-    for i, j in zip(images, masks):
-        if i != j:
-            print(i, j)
+    print(images)
