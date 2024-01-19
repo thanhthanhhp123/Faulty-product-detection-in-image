@@ -41,12 +41,10 @@ class BDataset(Dataset):
         logging.info(f'Creating dataset with {len(self.ids)} examples')
         logging.info('Scanning images and masks folders...')
         with Pool() as p:
-            unique = list(
-                    p.imap(
-                        partial(unique_mask_values, mask_dir=self.mask_dir, mask_suffix=self.mask_suffix),
-                        self.ids
-                    ),
-                )
+            unique = list(tqdm(
+                p.imap(partial(unique_mask_values, mask_dir=self.mask_dir, mask_suffix=self.mask_suffix), self.ids),
+                total=len(self.ids)
+            ))
             self.mask_values =list(sorted(
                 np.unique(
                     np.concatenate(
