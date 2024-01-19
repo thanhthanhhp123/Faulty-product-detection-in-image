@@ -1,38 +1,50 @@
+#Create metrics for the model
+
 import torch
-import torchvision
-from dataset import BottleDataset
-from torch.utils.data import DataLoader
+import torch.nn as nn
 
-class UnNormalize(object):
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
-        
-    def __call__(self, tensor):
-        for t, m, s in zip(tensor, self.mean, self.std):
-            t.mul_(s).add_(m)
-            # The normalize code -> t.sub_(m).div_(s)
-        return tensor
-    
-
-class AverageMeter(object):
+class DiceLoss(nn.Module):
     def __init__(self):
-        self.reset()
+        super().__init__()
+    
+    def forward(self, y_pred, y_true):
+        smooth = 1e-6
 
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
+        y_pred = torch.sigmoid(y_pred)
+        y_pred = y_pred.view(-1)
+        y_true = y_true.view(-1)
 
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
+        intersection = (y_pred * y_true).sum()
+        score = (2. * intersection + smooth) / (y_pred.sum() + y_true.sum() + smooth)
+        return 1 - score
 
-def accuracy_function(preds, targets):
-    preds_flat = preds.flatten()
-    targets_flat = targets.flatten()
-    acc = torch.sum(preds_flat == targets_flat)
-    return acc/targets_flat.shape[0]
+class IoU(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, y_pred, y_true):
+        smooth = 1e-6
+
+        y_pred = torch.sigmoid(y_pred)
+        y_pred = y_pred.view(-1)
+        y_true = y_true.view(-1)
+
+        intersection = (y_pred * y_true).sum()
+        union = y_pred.sum() + y_true.sum() - intersection
+        score = (intersection + smooth) / (union + smooth)
+        return score
+
+#Create a function to calculate the accuracy of the model
+
+def accuracy(y_pred, y_true):
+    y_pred = torch.sigmoid(y_pred)
+    y_pred = y_pred.view(-1)
+    y_true = y_true.view(-1)
+
+    y_pred = torch.round(y_pred)
+    correct = (y_pred == y_true).sum().float()
+    acc = correct / y_true.shape[0]
+    return acc
+
+#Create a function to calculate the mean loss of the model
+

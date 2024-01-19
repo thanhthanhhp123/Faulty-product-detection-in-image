@@ -1,48 +1,46 @@
+import torch
+from torch.utils.data import Dataset
+from torchvision import transforms
 import os
 from PIL import Image
-from torch.utils.data import DataLoader, Dataset
-import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
-import random
 
-random.seed(42)
+class MyDataset(Dataset):
+    def __init__(self, 
+                 images_dir,
+                 masks_dir):
+        self.images_dir = images_dir
+        self.masks_dir = masks_dir
+
+        self.images =sorted(os.listdir(images_dir))
+        self.masks = sorted(os.listdir(masks_dir))
 
 
-class BottleDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, transforms = None):
-        self.image_dir = image_dir
-        self.mask_dir = mask_dir
-        self.transforms = transforms
-        self.images = os.listdir(image_dir)
-        self.masks = os.listdir(mask_dir)
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+        ])
     
     def __len__(self):
         return len(self.images)
     
-    def __getitem__(self, index):
-        images = sorted(os.listdir(self.image_dir))
-        masks = sorted(os.listdir(self.mask_dir))
-        img_path = os.path.join(self.image_dir, images[index])
-        mask_path = os.path.join(self.mask_dir, masks[index])
-        image = np.array(Image.open(img_path).convert("RGB"))
-        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-        mask[mask == 255.0] = 1.0
-        
-        if self.transforms is not None:
-            augmentations = self.transforms(image=image, mask=mask)
-            image = augmentations["image"]
-            mask = augmentations["mask"]
-        
+    def __getitem__(self, idx):
+        image_path = os.path.join(self.images_dir, self.images[idx])
+        mask_path = os.path.join(self.masks_dir, self.masks[idx])
+
+        image = Image.open(image_path).convert('RGB')
+        mask = Image.open(mask_path).convert('L')
+
+        image = self.transform(image)
+        mask = self.transform(mask)
+
         return image, mask
     
+
 if __name__ == '__main__':
-    data = BottleDataset(
-        image_dir="bottle/train/images/",
-        mask_dir="bottle/train/masks/",
-    )
-    img, mask = data[0]
-    fig, ax = plt.subplots(1,2, figsize=(10,10))
-    ax[0].imshow(img)
-    ax[1].imshow(mask, cmap="gray")
-    plt.show()
+    images_dir = 'bottle/train/images/'
+    masks_dir = 'bottle/train/masks/'
+
+    dataset = MyDataset(images_dir, masks_dir)
+
+    image, mask = dataset[0]
+    print(image.shape)
+    print(mask.shape)
