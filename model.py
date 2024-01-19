@@ -69,3 +69,8 @@ class UNet(nn.Module):
             x = self.ups[idx+1](concat_skip)
 
         return self.final_conv(x)
+
+if __name__ == "__main__":
+    x = torch.randn((3, 1, 161, 161))
+    model = UNet(in_channels=1, out_channels=1)
+    print(model)
