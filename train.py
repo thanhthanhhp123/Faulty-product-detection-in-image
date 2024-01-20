@@ -66,10 +66,10 @@ callbacks = [
 
 history = model.fit(
     train_ds,
-    steps_per_epoch= tf.data.experimental.cardinality(train_ds).numpy() / batch_size,
+    steps_per_epoch= len(list(train_ds)).numpy() / batch_size,
     validation_data=val_ds,
     epochs=epochs,
     batch_size=batch_size,
     callbacks=callbacks,
-    validation_steps=tf.data.experimental.cardinality(val_ds).numpy() / batch_size
+    validation_steps=len(list(val_ds)).numpy() / batch_size
 )
