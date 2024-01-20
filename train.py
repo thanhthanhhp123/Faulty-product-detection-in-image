@@ -13,10 +13,10 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 batch_size = 16
 epochs = 100
 
-train_dataset = MyDataset('bottle/train/images', 'bottle/train/masks')
+train_dataset = MyDataset('/content/Faulty-product-detection-in-image/bottle/train/images', '/content/Faulty-product-detection-in-image/bottle/train/masks')
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-val_dataset = MyDataset('bottle/val/images', 'bottle/val/masks')
+val_dataset = MyDataset('/content/Faulty-product-detection-in-image/bottle/val/images', '/content/Faulty-product-detection-in-image/bottle/val/masks')
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 generator = torch.Generator().manual_seed(42)
