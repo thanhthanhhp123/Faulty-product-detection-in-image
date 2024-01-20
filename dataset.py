@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import os
 from PIL import Image
+import matplotlib.pyplot as plt
 
 class MyDataset(Dataset):
     def __init__(self, 
@@ -16,6 +17,7 @@ class MyDataset(Dataset):
 
 
         self.transform = transforms.Compose([
+            transforms.Resize((900, 900)),
             transforms.ToTensor(),
         ])
     
@@ -42,5 +44,7 @@ if __name__ == '__main__':
     dataset = MyDataset(images_dir, masks_dir)
 
     image, mask = dataset[0]
-    print(image.shape)
-    print(mask.shape)
+    fig, ax = plt.subplots(1, 2)
+    ax[0].imshow(image.permute(1, 2, 0))
+    ax[1].imshow(mask.squeeze(), cmap='gray')
+    plt.show()
