@@ -1,100 +1,75 @@
-import torch
-from torch import optim, nn
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-
-from unet import UNet
-from dataset import MyDataset
+from model import unet
 from utils import *
 
+import cv2
+import numpy as np
+import pandas as pd
+import seaborn as sns
+sns.set_style('darkgrid')
+import matplotlib.pyplot as plt
+from skimage.color import rgb2gray
+from skimage.morphology import label
+from skimage.transform import resize
+from sklearn.model_selection import train_test_split
+from skimage.io import imread, imshow, concatenate_images
 
-lr = 1e-4
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-batch_size = 16
+# import Deep learning Libraries
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import backend as K
+from tensorflow.keras.models import Model, load_model, save_model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam, Adamax
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras.layers import Input, Activation, BatchNormalization, Dropout, Lambda, Conv2D, Conv2DTranspose, MaxPooling2D, concatenate
+
+import warnings
+warnings.filterwarnings("ignore")
+
+images_path = 'bottle/image'
+mask_path = 'bottle/ground_truth'
+
+train_aug = dict(
+    rotation_range=5,
+    width_shift_range=0.05,
+    height_shift_range=0.05,
+    shear_range=5,
+    zoom_range=0.05,
+    horizontal_flip=True,
+    vertical_flip=True,
+    fill_mode='nearest',
+    validation_split=0.1
+)
+
+val_aug = dict(
+    validation_split=0.1
+)
+
+train_ds, val_ds = create_ds(
+    images_path,
+    mask_path,
+    train_aug,
+    val_aug
+)
+
+model = unet(input_size=(256, 256, 3))
+model.compile(optimizer=Adam(learning_rate=0.001), loss=dice_loss, metrics=['accuracy', iou_coef, dice_coef])
+
+model.summary()
+
 epochs = 100
+batch_size = 4
 
-train_dataset = MyDataset('/content/Faulty-product-detection-in-image/bottle/train/images', '/content/Faulty-product-detection-in-image/bottle/train/masks')
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+callbacks = [
+    ModelCheckpoint('model.h5', verbose=1, save_best_only=True),
+]
 
-val_dataset = MyDataset('/content/Faulty-product-detection-in-image/bottle/val/images', '/content/Faulty-product-detection-in-image/bottle/val/masks')
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-generator = torch.Generator().manual_seed(42)
-
-model = UNet(in_channels=3, num_classes=1).to(device)
-
-optimizer = optim.Adam(model.parameters(), lr=lr)
-criterion = nn.BCEWithLogitsLoss()
-
-#Create metrics for the model
-
-dice_loss = DiceLoss()
-iou = IoU()
-
-#Training with evaluation after each epoch and saving the best model
-
-best_loss = float('inf')
-
-for epoch in range(epochs):
-    print(f'Epoch {epoch+1}/{epochs}')
-    print('-' * 10)
-
-    train_acc = 0.0
-    train_loss = 0.0
-    val_acc = 0.0
-    val_loss = 0.0
-
-    model.train()
-    for images, masks in tqdm(train_loader):
-        images = images.to(device)
-        masks = masks.to(device)
-
-        outputs = model(images)
-        loss = criterion(outputs, masks)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        train_acc += accuracy(outputs, masks)
-        train_loss += loss.item()
-
-        #Add IoU and Dice Loss
-        train_iou = iou(outputs, masks)
-        train_dice = dice_loss(outputs, masks)
-
-
-    model.eval()
-    with torch.no_grad():
-        for images, masks in tqdm(val_loader):
-            images = images.to(device)
-            masks = masks.to(device)
-
-            outputs = model(images)
-            loss = criterion(outputs, masks)
-
-            val_acc += accuracy(outputs, masks)
-            val_loss += loss.item()
-
-            #Add IoU and Dice Loss
-            val_iou = iou(outputs, masks)
-            val_dice = dice_loss(outputs, masks)
-
-
-    train_acc = train_acc / len(train_loader)
-    train_loss = train_loss / len(train_loader)
-    val_acc = val_acc / len(val_loader)
-    val_loss = val_loss / len(val_loader)
-
-
-
-    print(f'Train loss: {train_loss:.4f} accuracy: {train_acc:.4f}')
-    print(f'Val loss: {val_loss:.4f} accuracy: {val_acc:.4f}')
-    print(f'Train IoU: {train_iou:.4f} Dice Loss: {train_dice:.4f}')
-    print(f'Val IoU: {val_iou:.4f} Dice Loss: {val_dice:.4f}')
-
-
-    if val_loss < best_loss:
-        best_loss = val_loss
-        torch.save(model.state_dict(), 'best_model.pth')
-        print('Saved best model')
+history = model.fit(
+    train_ds,
+    steps_per_epoch=len(train_ds) / batch_size,
+    validation_data=val_ds,
+    epochs=epochs,
+    batch_size=batch_size,
+    callbacks=callbacks,
+    validation_steps=len(val_ds) / batch_size
+)
