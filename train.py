@@ -26,8 +26,8 @@ from tensorflow.keras.layers import Input, Activation, BatchNormalization, Dropo
 import warnings
 warnings.filterwarnings("ignore")
 
-images_path = 'bottle/image'
-mask_path = 'bottle/ground_truth'
+images_path = '/content/Faulty-product-detection-in-image/bottle/image'
+mask_path = '/content/Faulty-product-detection-in-image/bottle/ground_truth'
 
 train_aug = dict(
     rotation_range=5,
@@ -73,3 +73,5 @@ history = model.fit(
     callbacks=callbacks,
     validation_steps=len(list(val_ds)).numpy() / batch_size
 )
+
+plot_training(history)
